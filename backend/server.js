@@ -9,7 +9,7 @@ const app = express();
 
 // ✅ CORS FIRST
 app.use(cors({
-  origin: "https://gentle-pithivier-5420c0.netlify.app"
+  origin: "https://idyllic-sawine-bba4f2.netlify.app"
 }));
 
 // ✅ BODY PARSER LIMIT (VERY IMPORTANT)
