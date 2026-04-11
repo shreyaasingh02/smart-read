@@ -9,7 +9,7 @@ const app = express();
 
 // ✅ CORS FIRST
 app.use(cors({
-  origin: "flourishing-douhua-392016.netlify.app"
+  origin: "stupendous-halva-b82f1a.netlify.app"
 }));
 
 // ✅ BODY PARSER LIMIT (VERY IMPORTANT)
