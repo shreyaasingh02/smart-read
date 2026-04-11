@@ -9,7 +9,7 @@ const app = express();
 
 // ✅ CORS FIRST
 app.use(cors({
-  origin: "https://stupendous-halva-b82f1a.netlify.app"
+  origin: "https://magical-creponne-e7f379.netlify.app"
 }));
 
 // ✅ BODY PARSER LIMIT (VERY IMPORTANT)
