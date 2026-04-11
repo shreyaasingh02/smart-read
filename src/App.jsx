@@ -24,13 +24,48 @@ function App() {
   const [currentBook, setCurrentBook] = useState(null);
   const [pageInput, setPageInput] = useState("");
 
-  useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("books")) || {};
-    setBooks(saved);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [userId, setUserId] = useState(null);
 
-    const firstBook = Object.keys(saved)[0];
-    if (firstBook) setCurrentBook(firstBook);
-  }, []);
+  useEffect(() => {
+  const savedUser = localStorage.getItem("userId");
+
+  if (savedUser) {
+    setUserId(savedUser);
+
+    // 🔥 also fetch books again
+    fetch("http://localhost:5000/api/login", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ userId: savedUser })
+    })
+    .then(res => res.json())
+    .then(data => {
+      const booksFromDB = data.books || {};
+      setBooks(booksFromDB);
+
+      const firstBook = Object.keys(booksFromDB)[0];
+      if (firstBook) setCurrentBook(firstBook);
+    });
+  }
+}, []);
+
+  const saveToBackend = async (updatedBooks) => {
+    if (!userId) return;
+
+    await fetch("http://localhost:5000/api/save-books", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        userId,
+        books: updatedBooks
+      })
+    });
+    console.log("Saving with userId:", userId);
+  };
 
   const handlePageChange = (e) => {
     setPageInput(e.target.value);
@@ -76,7 +111,7 @@ function App() {
         id: Date.now() + Math.random()
       }); 
 
-      localStorage.setItem("books", JSON.stringify(updated));
+      saveToBackend(updated);
       return updated;
     });
 
@@ -98,7 +133,7 @@ function App() {
         (n) => n.id !== noteId
       );
 
-      localStorage.setItem("books", JSON.stringify(updated));
+      saveToBackend(updated);
       return updated;
     });
   };
@@ -175,7 +210,7 @@ function App() {
 
       book.highlights[pageNum].push(newHighlight);
 
-      localStorage.setItem("books", JSON.stringify(updated));
+      saveToBackend(updated);
       return updated;
     });
 
@@ -189,7 +224,7 @@ function App() {
 
       delete updated[bookName];
 
-      localStorage.setItem("books", JSON.stringify(updated));
+      saveToBackend(updated);
 
       return updated;
     });
@@ -227,7 +262,7 @@ function App() {
         updated[currentBook].highlights[page] = newHighlights;
       }
 
-      localStorage.setItem("books", JSON.stringify(updated));
+      saveToBackend(updated);
       return updated;
     });
 
@@ -257,13 +292,15 @@ function App() {
       };
 
       setBooks(updatedBooks);
-      localStorage.setItem("books", JSON.stringify(updatedBooks));
+
+      saveToBackend(updatedBooks);
 
       setCurrentBook(file.name);
       setPageNum(1);
     };
 
     reader.readAsDataURL(file);
+    console.log("File size:", file.size);
   };
 
   // Save page
@@ -274,7 +311,7 @@ function App() {
       const updated = { ...prev };
       updated[currentBook].lastPage = page;
 
-      localStorage.setItem("books", JSON.stringify(updated));
+      saveToBackend(updated);
       return updated;
     });
   };
@@ -297,6 +334,46 @@ function App() {
         return color;
     }
   };
+
+  const handleSignup = async () => {
+    await fetch("http://localhost:5000/api/signup", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email, password })
+    });
+  };
+
+  const handleLogin = async () => {
+    const res = await fetch("http://localhost:5000/api/login", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+
+    setUserId(data.userId);
+
+    const booksFromDB = data.books || {};
+    setBooks(booksFromDB);
+
+    const firstBook = Object.keys(booksFromDB)[0];
+    if (firstBook) setCurrentBook(firstBook);
+    localStorage.setItem("userId", data.userId);
+  };
+  
+  if (!userId) {
+    return (
+      <div>
+        <h2>Login First</h2>
+        <input onChange={(e) => setEmail(e.target.value)} />
+        <input type="password" onChange={(e) => setPassword(e.target.value)} />
+        <button onClick={handleLogin}>Login</button>
+        <button onClick={handleSignup}>Signup</button>
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
 
