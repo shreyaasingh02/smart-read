@@ -186,7 +186,8 @@ function App() {
     if (!savedRange || !currentBook) return;
 
     const rects = savedRange.getClientRects();
-    const containerRect = container.getBoundingClientRect();
+    if (!containerRef.current) return;
+    const containerRect = containerRef.current.getBoundingClientRect();
 
     const groupId = Date.now() + Math.random();
 
