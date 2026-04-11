@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef  } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import workerSrc from "pdfjs-dist/build/pdf.worker?url";
 import "./App.css";
@@ -8,6 +8,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
 function App() {
+
   const [pageNum, setPageNum] = useState(1);
   const [numPages, setNumPages] = useState(null);
 
@@ -27,6 +28,8 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [userId, setUserId] = useState(null);
+
+  const containerRef = useRef(null);
 
   useEffect(() => {
   const savedUser = localStorage.getItem("userId");
@@ -183,16 +186,15 @@ function App() {
     if (!savedRange || !currentBook) return;
 
     const rects = savedRange.getClientRects();
-    const container = document.querySelector(".pdf-container");
     const containerRect = container.getBoundingClientRect();
 
     const groupId = Date.now() + Math.random();
 
     const rectArray = Array.from(rects).map((rect) => ({
-      left: rect.left - containerRect.left,
-      top: rect.top - containerRect.top,
-      width: rect.width,
-      height: rect.height,
+      left: (rect.left - containerRect.left) / containerRect.width,
+      top: (rect.top - containerRect.top) / containerRect.height,
+      width: rect.width / containerRect.width,
+      height: rect.height / containerRect.height,
     }));
 
     const newHighlight = {
@@ -362,7 +364,6 @@ function App() {
     localStorage.setItem("userId", data.userId);
   };
   
-  
   if (!userId) {
     return (
       <div>
@@ -421,7 +422,7 @@ function App() {
           </div>
         )}
 
-        <div className="pdf-container" onMouseUp={handleTextSelection} onTouchEnd={handleTextSelection} onClick={() => {setSelectedText(""); setSelectedHighlight(null)}}>
+        <div className="pdf-container" ref={containerRef} onMouseUp={handleTextSelection} onTouchEnd={handleTextSelection} onClick={() => {setSelectedText(""); setSelectedHighlight(null)}}>
           {currentBook && (
             <Document file={books[currentBook]?.file} onLoadSuccess={({ numPages }) => setNumPages(numPages)}>
               <Page
@@ -433,19 +434,25 @@ function App() {
           )}
 
           {books[currentBook]?.highlights?.[pageNum]?.map((group, i) =>
-            group.rects.map((h, j) => (
-              <div key={`${i}-${j}`} className="highlight-layer" onClick={(e) => {e.stopPropagation();
-                setSelectedHighlight({groupId: group.groupId, page: pageNum});
-                setPopupPos({top: e.clientY + window.scrollY, left: e.clientX + window.scrollX})}}
-                style={{
-                  left: h.left,
-                  top: h.top,
-                  width: h.width,
-                  height: h.height,
-                  background: getTransparentColor(group.color),
-                }}
-              />
-            ))
+            group.rects.map((h, j) => {
+              const rect = containerRef.current?.getBoundingClientRect();
+              if (!rect) return null;
+              return (
+                <div key={`${i}-${j}`} className="highlight-layer" onClick={(e) => {e.stopPropagation();
+                  setSelectedHighlight({groupId: group.groupId, page: pageNum});
+                  setPopupPos({top: e.clientY + window.scrollY, left: e.clientX + window.scrollX})}}
+                  
+                  style={{
+                    
+                    left: h.left * rect.width,
+                    top: h.top * rect.height,
+                    width: h.width * rect.width,
+                    height: h.height * rect.height,
+                    background: getTransparentColor(group.color),
+                  }}
+                />
+              )
+            })
           )}
           <button className="floating-prev" disabled={pageNum <= 1} onClick={() => {const p = pageNum - 1; setPageNum(p); savePage(p)}}> ⬅ </button>
           <button
