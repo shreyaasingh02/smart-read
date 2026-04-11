@@ -421,7 +421,7 @@ function App() {
           </div>
         )}
 
-        <div className="pdf-container" onMouseUp={handleTextSelection} onClick={() => {setSelectedText(""); setSelectedHighlight(null)}}>
+        <div className="pdf-container" onMouseUp={handleTextSelection} onTouchEnd={handleTextSelection} onClick={() => {setSelectedText(""); setSelectedHighlight(null)}}>
           {currentBook && (
             <Document file={books[currentBook]?.file} onLoadSuccess={({ numPages }) => setNumPages(numPages)}>
               <Page

@@ -135,6 +135,8 @@ h1 {
 
 /* PDF CONTAINER */
 .pdf-container {
+  -webkit-user-select: text;
+  user-select: text;
   position: relative;
   display: flex;
   justify-content: center;
