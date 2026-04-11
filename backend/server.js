@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -7,7 +9,7 @@ const app = express();
 
 // ✅ CORS FIRST
 app.use(cors({
-  origin: "http://localhost:5173"
+  origin: "flourishing-douhua-392016.netlify.app"
 }));
 
 // ✅ BODY PARSER LIMIT (VERY IMPORTANT)
@@ -18,9 +20,10 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use("/api", authRoutes);
 
 // ✅ DB
-mongoose.connect("mongodb://127.0.0.1:27017/bookApp")
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => console.log(err));
+
 
 // ✅ SERVER
 app.listen(5000, () => console.log("Server running on port 5000"));

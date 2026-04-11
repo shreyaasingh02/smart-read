@@ -35,7 +35,7 @@ function App() {
     setUserId(savedUser);
 
     // 🔥 also fetch books again
-    fetch("http://localhost:5000/api/login", {
+    fetch("https://book-backend-iupp.onrender.com/api/login", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ userId: savedUser })
@@ -54,7 +54,7 @@ function App() {
   const saveToBackend = async (updatedBooks) => {
     if (!userId) return;
 
-    await fetch("http://localhost:5000/api/save-books", {
+    await fetch("https://book-backend-iupp.onrender.com/api/save-books", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -336,7 +336,7 @@ function App() {
   };
 
   const handleSignup = async () => {
-    await fetch("http://localhost:5000/api/signup", {
+    await fetch("https://book-backend-iupp.onrender.com/api/signup", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ email, password })
@@ -344,7 +344,7 @@ function App() {
   };
 
   const handleLogin = async () => {
-    const res = await fetch("http://localhost:5000/api/login", {
+    const res = await fetch("https://book-backend-iupp.onrender.com/api/login", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ email, password })
