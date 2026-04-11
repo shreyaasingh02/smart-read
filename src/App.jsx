@@ -362,6 +362,7 @@ function App() {
     localStorage.setItem("userId", data.userId);
   };
   
+  
   if (!userId) {
     return (
       <div>
@@ -423,7 +424,11 @@ function App() {
         <div className="pdf-container" onMouseUp={handleTextSelection} onClick={() => {setSelectedText(""); setSelectedHighlight(null)}}>
           {currentBook && (
             <Document file={books[currentBook]?.file} onLoadSuccess={({ numPages }) => setNumPages(numPages)}>
-              <Page pageNumber={pageNum} width={1100} renderTextLayer />
+              <Page
+                pageNumber={pageNum}
+                width={window.innerWidth < 768 ? window.innerWidth * 0.9 : 1100}
+                renderTextLayer
+              />
             </Document>
           )}
 

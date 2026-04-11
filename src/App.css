@@ -354,3 +354,77 @@ h1 {
 .delete-note:hover {
   color: #ef4444;
 }
+
+/* ================= MOBILE RESPONSIVE ================= */
+@media (max-width: 768px) {
+
+  .app-container {
+    flex-direction: column;
+  }
+
+  /* SIDEBAR → TOP */
+  .sidebar {
+    position: relative;
+    width: 100%;
+    height: auto;
+    display: flex;
+    overflow-x: auto;
+    gap: 10px;
+  }
+
+  .book-item {
+    min-width: 120px;
+  }
+
+  /* RIGHT SIDEBAR → BOTTOM */
+  .right-sidebar {
+    position: relative;
+    width: 100%;
+    height: auto;
+    margin-top: 10px;
+  }
+
+  /* MAIN CONTENT */
+  .main-content {
+    margin: 0;
+    width: 100%;
+    padding: 10px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  .fileChoose {
+    width: 90%;
+    font-size: 16px;
+  }
+
+  /* PDF */
+  .pdf-container {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  /* FLOATING BUTTONS FIX */
+  .floating-prev,
+  .floating-next {
+    position: fixed;
+    bottom: 15px;
+  }
+
+  .floating-prev {
+    left: 20px;
+  }
+
+  .floating-next {
+    right: 20px;
+  }
+
+  /* POPUP FIX */
+  .popup {
+    width: 180px;
+    font-size: 12px;
+  }
+
+}
