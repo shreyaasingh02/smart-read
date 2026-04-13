@@ -9,7 +9,7 @@ const app = express();
 
 // ✅ CORS FIRST
 app.use(cors({
-  origin: "https://sparkly-blancmange-95305e.netlify.app"
+  origin: "https://dazzling-dusk-481be7.netlify.app"
 }));
 
 // ✅ BODY PARSER LIMIT (VERY IMPORTANT)
