@@ -154,7 +154,7 @@ h1 {
 /* HIGHLIGHT */
 .highlight-layer {
   position: absolute;
-  opacity: 0.9;
+  opacity: 0.9 !important;
   border-radius: 4px;
   cursor: pointer;
   z-index: 2;
