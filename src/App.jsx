@@ -322,17 +322,17 @@ function App() {
   const getTransparentColor = (color) => {
     switch (color) {
       case "yellow":
-        return "rgba(255, 255, 0, 0.4)";
+        return "rgba(255, 255, 0, 0.5)";
       case "lightgreen":
-        return "rgba(144, 238, 144, 0.4)";
+        return "rgba(144, 238, 144, 0.9)";
       case "lightblue":
-        return "rgba(173, 216, 230, 0.4)";
+        return "rgba(173, 216, 230, 1)";
       case "pink":
-        return "rgba(255, 182, 193, 0.4)";
+        return "rgba(255, 182, 193, 0.9)";
       case "lavender":
-        return "rgba(230, 230, 250, 0.5)";
+        return "rgba(230, 230, 250, 1)";
       case "peach":
-        return "rgba(255, 218, 185, 0.5)";
+        return "rgba(255, 218, 185, 1)";
       default:
         return color;
     }
