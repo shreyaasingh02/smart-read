@@ -754,14 +754,14 @@ button:disabled {
   margin-bottom: 6px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--text);
-  background: var(--white);
-  border: 1.5px solid var(--border);
+  color: var(--white);
+  /* background: var(--t); */
+  border: 1.5px solid var(--pink);
   transition: background 0.2s, border-color 0.2s, transform 0.15s;
 }
 
 .page-item:hover {
-  background: var(--pink-soft);
+  background: var(--pink);
   border-color: var(--pink);
   transform: translateX(-3px);
 }
