@@ -262,6 +262,7 @@ function App() {
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    e.target.value = "";  // reset input so same file can be re-added after removal
     const reader = new FileReader();
     reader.onload = () => {
       if (books[file.name]) { setCurrentBook(file.name); return; }
@@ -271,7 +272,7 @@ function App() {
         highlights: {},
         notes: [],
       };
-      const updatedBooks = { ...books, [file.name]: newBook };
+      const updatedBooks = { [file.name]: newBook, ...books };  // prepend to top
       setBooks(updatedBooks);
       saveToBackend(updatedBooks);
       setCurrentBook(file.name);
