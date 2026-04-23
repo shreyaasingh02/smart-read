@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef  } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import workerSrc from "pdfjs-dist/build/pdf.worker?url";
 import "./App.css";
@@ -6,6 +6,52 @@ import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+
+// ── IndexedDB helpers ──────────────────────────────────────────────────────────
+const DB_NAME = "SmartReadDB";
+const STORE_NAME = "pdfs";
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      e.target.result.createObjectStore(STORE_NAME);
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function savePDFtoDB(name, dataUrl) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).put(dataUrl, name);
+    tx.oncomplete = resolve;
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function getPDFfromDB(name) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const req = tx.objectStore(STORE_NAME).get(name);
+    req.onsuccess = (e) => resolve(e.target.result || null);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function deletePDFfromDB(name) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).delete(name);
+    tx.oncomplete = resolve;
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+// ──────────────────────────────────────────────────────────────────────────────
 
 function App() {
 
@@ -16,8 +62,7 @@ function App() {
   const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
   const [selectedHighlight, setSelectedHighlight] = useState(null);
 
-  // ── upgraded dictionary state ──
-  const [dictData, setDictData] = useState(null);   // full parsed result
+  const [dictData, setDictData] = useState(null);
   const [dictLoading, setDictLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
@@ -25,9 +70,11 @@ function App() {
   const [showNoteBox, setShowNoteBox] = useState(false);
   const [savedRange, setSavedRange] = useState(null);
 
-  const [books, setBooks] = useState({});
+  const [books, setBooks] = useState({});           // metadata only (no file)
+  const [pdfFiles, setPdfFiles] = useState({});     // { bookName: dataUrl } — in memory
   const [currentBook, setCurrentBook] = useState(null);
   const [pageInput, setPageInput] = useState("");
+  const [missingPdf, setMissingPdf] = useState(false); // true when IndexedDB has no PDF for current book
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,32 +82,79 @@ function App() {
 
   const containerRef = useRef(null);
 
+  // ── On mount: restore session ──
   useEffect(() => {
     const savedUser = localStorage.getItem("userId");
     if (savedUser) {
       setUserId(savedUser);
       fetch("https://book-backend-iupp.onrender.com/api/login", {
         method: "POST",
-        headers: {"Content-Type": "application/json"},
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: savedUser })
       })
-      .then(res => res.json())
-      .then(data => {
-        const booksFromDB = data.books || {};
-        setBooks(booksFromDB);
-        const firstBook = Object.keys(booksFromDB)[0];
-        if (firstBook) setCurrentBook(firstBook);
-      });
+        .then(res => res.json())
+        .then(async (data) => {
+          const booksFromDB = data.books || {};
+          setBooks(booksFromDB);
+          const firstBook = Object.keys(booksFromDB)[0];
+          if (firstBook) {
+            setCurrentBook(firstBook);
+            setPageNum(booksFromDB[firstBook]?.lastPage || 1);
+            // Try to load PDF from IndexedDB
+            await loadPdfFromIDB(firstBook);
+          }
+        });
     }
   }, []);
 
+  // ── When currentBook changes, load its PDF from IndexedDB ──
+  useEffect(() => {
+    if (!currentBook) return;
+    if (pdfFiles[currentBook]) {
+      setMissingPdf(false);
+      return;
+    }
+    loadPdfFromIDB(currentBook);
+  }, [currentBook]);
+
+  const loadPdfFromIDB = async (bookName) => {
+    try {
+      const dataUrl = await getPDFfromDB(bookName);
+      if (dataUrl) {
+        setPdfFiles(prev => ({ ...prev, [bookName]: dataUrl }));
+        setMissingPdf(false);
+      } else {
+        setMissingPdf(true);
+      }
+    } catch {
+      setMissingPdf(true);
+    }
+  };
+
+  // ── Save metadata only to backend (NO file/base64) ──
   const saveToBackend = async (updatedBooks) => {
     if (!userId) return;
-    await fetch("https://book-backend-iupp.onrender.com/api/save-books", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, books: updatedBooks })
-    });
+    // Strip the file field — never send PDF binary to backend
+    const metaOnly = {};
+    for (const [name, book] of Object.entries(updatedBooks)) {
+      metaOnly[name] = {
+        lastPage: book.lastPage,
+        highlights: book.highlights,
+        notes: book.notes,
+      };
+    }
+    try {
+      const res = await fetch("https://book-backend-iupp.onrender.com/api/save-books", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, books: metaOnly })
+      });
+      if (!res.ok) {
+        console.error("Backend save failed:", res.status, await res.text());
+      }
+    } catch (err) {
+      console.error("Backend save error:", err);
+    }
   };
 
   const handlePageChange = (e) => setPageInput(e.target.value);
@@ -127,35 +221,20 @@ function App() {
     }, 10);
   };
 
-  // ── Upgraded dictionary ──
+  // ── Dictionary ──
   const handleMeaning = async () => {
-    const word = selectedText.trim().split(/\s+/)[0]; // single-word lookup
+    const word = selectedText.trim().split(/\s+/)[0];
     setDictLoading(true);
     setDictData(null);
     try {
       const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
       const data = await res.json();
-
-      // if (!Array.isArray(data) || !data[0]) {
-      //   setDictData({ error: "No definition found for + " " + word + " " });
-      //   setDictLoading(false);
-      //   return();
-      // }
-
       const entry = data[0];
-
-      // phonetic text — prefer the one with audio, fallback to first available
       const phoneticText =
         entry.phonetics?.find(p => p.text && p.audio)?.text ||
         entry.phonetics?.find(p => p.text)?.text ||
-        entry.phonetic ||
-        "";
-
-      // audio URL for pronunciation
-      const audioUrl =
-        entry.phonetics?.find(p => p.audio)?.audio || "";
-
-      // collect all meanings (up to 3 parts of speech)
+        entry.phonetic || "";
+      const audioUrl = entry.phonetics?.find(p => p.audio)?.audio || "";
       const meanings = entry.meanings.slice(0, 3).map(m => ({
         partOfSpeech: m.partOfSpeech,
         definitions: m.definitions.slice(0, 2).map(d => ({
@@ -163,10 +242,7 @@ function App() {
           example: d.example || ""
         }))
       }));
-
-      // synonyms from first meaning
       const synonyms = entry.meanings[0]?.synonyms?.slice(0, 5) || [];
-
       setDictData({ word: entry.word, phoneticText, audioUrl, meanings, synonyms });
     } catch {
       setDictData({ error: "Error fetching definition." });
@@ -174,20 +250,17 @@ function App() {
     setDictLoading(false);
   };
 
-  // ── Pronunciation: prefer audio file, fallback to SpeechSynthesis ──
+  // ── Pronunciation ──
   const handleSpeak = () => {
     const word = selectedText.trim().split(/\s+/)[0];
-
-    // try audio from dictionary first
     if (dictData?.audioUrl) {
       const audio = new Audio(dictData.audioUrl);
       audio.play().then(() => {
         setIsSpeaking(true);
         audio.onended = () => setIsSpeaking(false);
-      }).catch(() => speakWithSynth(word)); // fallback
+      }).catch(() => speakWithSynth(word));
       return;
     }
-
     speakWithSynth(word);
   };
 
@@ -229,7 +302,14 @@ function App() {
     setSelectedText("");
   };
 
-  const removeBook = (bookName) => {
+  const removeBook = async (bookName) => {
+    // Remove PDF from IndexedDB
+    try { await deletePDFfromDB(bookName); } catch { /* ignore */ }
+    setPdfFiles(prev => {
+      const updated = { ...prev };
+      delete updated[bookName];
+      return updated;
+    });
     setBooks((prev) => {
       const updated = { ...prev };
       delete updated[bookName];
@@ -259,20 +339,36 @@ function App() {
     setSelectedText("");
   };
 
+  // ── File upload: save PDF to IndexedDB, metadata to backend ──
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    e.target.value = "";  // reset input so same file can be re-added after removal
+    e.target.value = "";
     const reader = new FileReader();
-    reader.onload = () => {
-      if (books[file.name]) { setCurrentBook(file.name); return; }
-      const newBook = {
-        file: reader.result,
-        lastPage: 1,
-        highlights: {},
-        notes: [],
-      };
-      const updatedBooks = { [file.name]: newBook, ...books };  // prepend to top
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+
+      // Save PDF binary to IndexedDB (stays on this device)
+      try {
+        await savePDFtoDB(file.name, dataUrl);
+      } catch (err) {
+        console.error("IndexedDB save failed:", err);
+      }
+
+      // Keep in memory for current session
+      setPdfFiles(prev => ({ ...prev, [file.name]: dataUrl }));
+      setMissingPdf(false);
+
+      if (books[file.name]) {
+        // Book already known — just switch to it
+        setCurrentBook(file.name);
+        setPageNum(books[file.name]?.lastPage || 1);
+        return;
+      }
+
+      // New book — save metadata to backend (NO file)
+      const newBook = { lastPage: 1, highlights: {}, notes: [] };
+      const updatedBooks = { [file.name]: newBook, ...books };
       setBooks(updatedBooks);
       saveToBackend(updatedBooks);
       setCurrentBook(file.name);
@@ -293,27 +389,20 @@ function App() {
 
   const getTransparentColor = (color) => {
     switch (color) {
-      case "yellow":
-        return "rgba(255, 255, 0, 0.5)";
-      case "lightgreen":
-        return "rgba(144, 238, 144, 0.5)";
-      case "lightblue":
-        return "rgba(173, 216, 230, 0.7)";
-      case "pink":
-        return "rgba(255, 182, 193, 0.9)";
-      case "lavender":
-        return "rgba(191, 191, 243, 1)";
-      case "peach":
-        return "rgba(227, 187, 151, 0.8)";
-      default:
-        return color;
+      case "yellow": return "rgba(255, 255, 0, 0.5)";
+      case "lightgreen": return "rgba(144, 238, 144, 0.5)";
+      case "lightblue": return "rgba(173, 216, 230, 0.7)";
+      case "pink": return "rgba(255, 182, 193, 0.9)";
+      case "lavender": return "rgba(191, 191, 243, 1)";
+      case "peach": return "rgba(227, 187, 151, 0.8)";
+      default: return color;
     }
   };
 
   const handleSignup = async () => {
     await fetch("https://book-backend-iupp.onrender.com/api/signup", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password })
     });
   };
@@ -321,7 +410,7 @@ function App() {
   const handleLogin = async () => {
     const res = await fetch("https://book-backend-iupp.onrender.com/api/login", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password })
     });
     const data = await res.json();
@@ -329,7 +418,11 @@ function App() {
     const booksFromDB = data.books || {};
     setBooks(booksFromDB);
     const firstBook = Object.keys(booksFromDB)[0];
-    if (firstBook) setCurrentBook(firstBook);
+    if (firstBook) {
+      setCurrentBook(firstBook);
+      setPageNum(booksFromDB[firstBook]?.lastPage || 1);
+      await loadPdfFromIDB(firstBook);
+    }
     localStorage.setItem("userId", data.userId);
   };
 
@@ -369,6 +462,13 @@ function App() {
 
         <input className="fileChoose" type="file" accept="application/pdf" onChange={handleFileUpload} />
 
+        {/* Show a friendly message if PDF is missing from this device */}
+        {currentBook && missingPdf && (
+          <p style={{ color: "#f87171", fontSize: "14px", marginTop: "8px" }}>
+            📂 Please re-upload <strong>{currentBook}</strong> to view it — your highlights & notes are saved!
+          </p>
+        )}
+
         <div className="preNexBtn">
           <button disabled={pageNum <= 1} onClick={() => { const p = pageNum - 1; setPageNum(p); savePage(p); }}>Prev</button>
           <button disabled={pageNum >= numPages} onClick={() => { const p = pageNum + 1; setPageNum(p); savePage(p); }}>Next</button>
@@ -386,8 +486,8 @@ function App() {
           onMouseUp={handleTextSelection} onTouchEnd={handleTextSelection}
           onClick={() => { setSelectedText(""); setSelectedHighlight(null); }}>
 
-          {currentBook && (
-            <Document file={books[currentBook]?.file}
+          {currentBook && pdfFiles[currentBook] && (
+            <Document file={pdfFiles[currentBook]}
               onLoadSuccess={({ numPages }) => setNumPages(numPages)}>
               <Page
                 pageNumber={pageNum}
@@ -426,24 +526,18 @@ function App() {
             onClick={() => { const p = pageNum + 1; setPageNum(p); savePage(p); }}>➡</button>
         </div>
 
-        {/* ── TEXT POPUP ── */}
+        {/* TEXT POPUP */}
         {selectedText && (
           <div className="popup" style={{ top: popupPos.top, left: popupPos.left }}
             onClick={(e) => e.stopPropagation()}>
 
-            {/* Header: selected word + close */}
             <div className="popup-header">
               <span className="popup-word">{selectedText.length > 30 ? selectedText.slice(0, 30) + "…" : selectedText}</span>
               <span className="popup-close" onClick={() => setSelectedText("")}>✕</span>
             </div>
 
-            {/* Pronunciation row */}
             <div className="pronunciation-row">
-              <button
-                className={`speak-btn ${isSpeaking ? "speaking" : ""}`}
-                onClick={handleSpeak}
-                title="Pronounce"
-              >
+              <button className={`speak-btn ${isSpeaking ? "speaking" : ""}`} onClick={handleSpeak} title="Pronounce">
                 🔊
               </button>
               {dictData?.phoneticText
@@ -452,7 +546,6 @@ function App() {
               }
             </div>
 
-            {/* Action buttons */}
             <div className="btns">
               <button onClick={handleMeaning} disabled={dictLoading}>
                 {dictLoading ? "Loading…" : "Meaning"}
@@ -460,7 +553,6 @@ function App() {
               <button onClick={() => setShowNoteBox(v => !v)}>Note</button>
             </div>
 
-            {/* ── Upgraded meaning card ── */}
             {dictData && !dictData.error && (
               <div className="dict-card">
                 {dictData.meanings.map((m, mi) => (
@@ -483,11 +575,8 @@ function App() {
               </div>
             )}
 
-            {dictData?.error && (
-              <p className="dict-error">{dictData.error}</p>
-            )}
+            {dictData?.error && <p className="dict-error">{dictData.error}</p>}
 
-            {/* Note box */}
             {showNoteBox && (
               <div className="note-box">
                 <input value={noteInput} onChange={(e) => setNoteInput(e.target.value)}
@@ -496,7 +585,6 @@ function App() {
               </div>
             )}
 
-            {/* Saved notes for this word */}
             {Array.isArray(books[currentBook]?.notes) &&
               books[currentBook].notes
                 .filter((n) => n.word === selectedText)
@@ -504,7 +592,6 @@ function App() {
                   <p key={n.id} className="saved-note">📝 {n.text}</p>
                 ))}
 
-            {/* Highlight colors */}
             <div className="colors">
               <span onClick={() => handleHighlight("yellow")} title="Yellow" />
               <span onClick={() => handleHighlight("lightgreen")} title="Green" />
